@@ -68,16 +68,17 @@ claude-sessions() {
         stat_fmt=(-c '%Y %s %n')
     fi
 
-    printf '%-19s  %8s  %-36s  %-32s  %-26s  %s\n' \
-        "MODIFIED" "SIZE" "SESSION" "PROJECT" "BRANCH" "PREVIEW"
-    printf '%-19s  %8s  %-36s  %-32s  %-26s  %s\n' \
+    printf '%-19s  %8s  %-36s  %-20s  %-26s  %s\n' \
+        "MODIFIED" "SIZE" "SESSION" "PROJECT" "BRANCH" "PREVIEW (first → last user prompt)"
+    printf '%-19s  %8s  %-36s  %-20s  %-26s  %s\n' \
         "-------------------" "--------" \
         "------------------------------------" \
-        "--------------------------------" \
-        "--------------------------" "-------"
+        "--------------------" \
+        "--------------------------" "----------------------------------"
 
     local line mtime rest size fpath_ proj sess when human \
-          cwd branch short_proj short_branch preview
+          cwd branch short_proj short_branch \
+          first_p last_p first_t last_t preview
     while IFS= read -r line; do
         mtime=${line%% *}; rest=${line#* }
         size=${rest%% *}; fpath_=${rest#* }
@@ -95,10 +96,13 @@ claude-sessions() {
 
         # Real cwd (from the JSONL itself) — more accurate than decoding the folder name,
         # since directory names containing '-' can't be losslessly reversed from '/'-encoding.
+        # Project column shows just the basename (e.g. plantao-backend) — pair it with the
+        # SESSION id and BRANCH to disambiguate.
         cwd=$(jq -r 'select(.cwd != null) | .cwd' "$fpath_" 2>/dev/null | head -n1)
         [[ -z $cwd ]] && cwd=${proj//-//}
-        short_proj=$cwd
-        (( ${#short_proj} > 32 )) && short_proj="...${short_proj: -29}"
+        short_proj=${cwd:t}
+        [[ -z $short_proj ]] && short_proj="(unknown)"
+        (( ${#short_proj} > 20 )) && short_proj="${short_proj:0:17}..."
 
         # Last gitBranch wins (reflects state at end of session, not start).
         branch=$(jq -r 'select(.gitBranch != null) | .gitBranch' "$fpath_" 2>/dev/null | tail -n1)
@@ -106,17 +110,31 @@ claude-sessions() {
         short_branch=$branch
         (( ${#short_branch} > 26 )) && short_branch="${short_branch:0:23}..."
 
-        preview=$(jq -r 'select(.type=="user") | .message.content |
+        # First and last real user prompts. "Real" = skip slash-commands, hooks,
+        # caveat banners, and system-reminder blobs. Gives you topic + where-I-left-off.
+        first_p=$(jq -r 'select(.type=="user") | .message.content |
             if type=="string" then .
             else (map(select(.type=="text") | .text // "") | join(" "))
             end' "$fpath_" 2>/dev/null \
             | grep -vE '^\s*(<command-|<local-command|Caveat:|<system-reminder|$)' \
-            | head -n1 \
-            | tr '\n\t' '  ' \
-            | cut -c 1-60)
-        [[ -z $preview ]] && preview="(no user message)"
+            | head -n1 | tr '\n\t' '  ')
+        last_p=$(jq -r 'select(.type=="user") | .message.content |
+            if type=="string" then .
+            else (map(select(.type=="text") | .text // "") | join(" "))
+            end' "$fpath_" 2>/dev/null \
+            | grep -vE '^\s*(<command-|<local-command|Caveat:|<system-reminder|$)' \
+            | tail -n1 | tr '\n\t' '  ')
+        if [[ -z $first_p ]]; then
+            preview="(no user message)"
+        elif [[ $first_p == $last_p ]]; then
+            preview=$(printf '%s' "$first_p" | cut -c 1-80)
+        else
+            first_t=$(printf '%s' "$first_p" | cut -c 1-37)
+            last_t=$(printf '%s' "$last_p" | cut -c 1-37)
+            preview="${first_t} → ${last_t}"
+        fi
 
-        printf '%-19s  %8s  %-36s  %-32s  %-26s  %s\n' \
+        printf '%-19s  %8s  %-36s  %-20s  %-26s  %s\n' \
             "$when" "$human" "$sess" "$short_proj" "$short_branch" "$preview"
     done < <(find "$dir" -maxdepth 2 -name '*.jsonl' -type f -print0 \
               | xargs -0 stat "${stat_fmt[@]}" 2>/dev/null \

@@ -10,17 +10,25 @@ Claude Code's built-in `/resume` only shows sessions for the project you launche
 
 ```text
 $ claude-sessions
-MODIFIED                 SIZE  SESSION                               PROJECT                           BRANCH                      PREVIEW
--------------------  --------  ------------------------------------  --------------------------------  --------------------------  -------
-2026-05-11 10:31:25    290.4K  dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da  /Users/me/Developer/foo/backend   P24H-16-sms-validation...   help me with this: SSH key
-2026-05-11 09:57:03    324.1K  c2ee22e2-4d8d-4c9d-bbe4-0155e2c8d55d  /Users/me/Developer/foo/backend   main                        por favor veja se faz sentido...
-2026-05-08 11:31:23    112.8K  2bfae921-5520-476f-8169-fa5f9820c332  /Users/me/Developer/bar/demo1     main                        what's in this project?
+MODIFIED                 SIZE  SESSION                               PROJECT               BRANCH                      PREVIEW (first → last user prompt)
+-------------------  --------  ------------------------------------  --------------------  --------------------------  ----------------------------------
+2026-05-13 10:31:25      1.4M  dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da  plantao-backend       P24H-16-sms-validation...   help me with this: SSH key            → ok let's push the branch
+2026-05-11 09:57:03    324.1K  c2ee22e2-4d8d-4c9d-bbe4-0155e2c8d55d  plantao-backend       main                        refactor auth middleware              → fix failing tests
+2026-05-08 11:31:23    112.8K  2bfae921-5520-476f-8169-fa5f9820c332  demo1                 main                        what's in this project?
 ...
 
 $ claude-resume dc3fdfbd
-→ cd /Users/me/Developer/foo/backend
+→ cd /Users/me/Developer/plantao24h/repos/plantao-backend
 → claude --resume dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da
 ```
+
+Columns at a glance:
+
+- **MODIFIED / SIZE** — when and how big the transcript is on disk.
+- **SESSION** — full UUID, ready to copy into `claude --resume` (or pass a prefix to `claude-resume`).
+- **PROJECT** — just the basename of the directory Claude Code ran in (e.g. `plantao-backend`). Pair it with BRANCH and SESSION to disambiguate when several sessions live in the same repo.
+- **BRANCH** — the last `gitBranch` recorded in the session (i.e. the branch you were on when you stopped).
+- **PREVIEW** — the **first user prompt** followed by `→` and the **last user prompt**, so you see both the topic and where you left off. If there's only one prompt, just that one is shown.
 
 ## Requirements
 

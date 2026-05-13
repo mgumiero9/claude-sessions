@@ -10,8 +10,10 @@
 # jump straight back into any session without manually cd'ing first.
 #
 # Usage:
-#   claude-sessions               # 20 most recent sessions
+#   claude-sessions               # 20 most recent sessions, sorted by mtime DESC
 #   claude-sessions 50            # 50 most recent sessions
+#   claude-sessions --by-size     # sort by file size DESC instead of mtime
+#   claude-sessions 50 -s         # 50 biggest sessions
 #   claude-resume <session-id>    # cd into the right project and resume
 #   claude-resume dc3fdfbd        # prefix match (first unique match wins)
 #
@@ -30,9 +32,29 @@
 
 claude-sessions() {
     emulate -L zsh
-    local limit=${1:-20}
+    local limit=20
+    local by_size=0
+    while (( $# )); do
+        case $1 in
+            --by-size|-s) by_size=1; shift ;;
+            --help|-h)
+                echo "Usage: claude-sessions [limit] [--by-size|-s]"
+                return 0 ;;
+            -*) echo "Unknown flag: $1"; return 1 ;;
+            *)
+                if [[ $1 == <-> ]]; then
+                    limit=$1; shift
+                else
+                    echo "Bad argument: $1"; return 1
+                fi ;;
+        esac
+    done
     local dir="$HOME/.claude/projects"
     [[ -d $dir ]] || { echo "No Claude projects dir at $dir"; return 1; }
+    local sort_key
+    if (( by_size )); then sort_key="-k2,2"
+    else sort_key="-k1,1"
+    fi
 
     # macOS (BSD) and Linux (GNU) disagree on `stat` and `date` flags.
     local -a stat_fmt
@@ -96,7 +118,7 @@ claude-sessions() {
             "$when" "$human" "$sess" "$short_proj" "$short_branch" "$preview"
     done < <(find "$dir" -maxdepth 2 -name '*.jsonl' -type f -print0 \
               | xargs -0 stat "${stat_fmt[@]}" 2>/dev/null \
-              | sort -rn \
+              | sort $sort_key -rn \
               | head -n "$limit")
 }
 

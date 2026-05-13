@@ -47,12 +47,17 @@ Or just copy the contents of `claude-sessions.zsh` straight into your `~/.zshrc`
 ## Usage
 
 ```bash
-claude-sessions               # 20 most recent sessions
+claude-sessions               # 20 most recent sessions (sorted by mtime DESC)
 claude-sessions 50            # 50 most recent sessions
+
+claude-sessions --by-size     # sort by transcript file size DESC instead of mtime
+claude-sessions 50 -s         # 50 biggest sessions on disk
 
 claude-resume <session-id>    # cd into the right project and resume
 claude-resume dc3fdfbd        # session-id prefix is fine (first 8 chars usually unique)
 ```
+
+The default sort is by modification time (newest first), which answers "what was I working on most recently?". The `--by-size` flag (alias `-s`) sorts by transcript size descending, which is useful for spotting your largest / longest-running sessions — typically the ones eating disk or worth pruning.
 
 ## Resuming a session
 

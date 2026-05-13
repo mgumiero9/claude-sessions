@@ -113,12 +113,18 @@ claude-sessions() {
         # First 3 real user prompts. "Real" = skip slash-commands, hooks,
         # caveat banners, and system-reminder blobs. Joined by →, each capped at ~25 chars
         # so the column stays around 80.
-        prompts=("${(@f)$(jq -r 'select(.type=="user") | .message.content |
-            if type=="string" then .
-            else (map(select(.type=="text") | .text // "") | join(" "))
-            end' "$fpath_" 2>/dev/null \
+        # Note: gsub() inside jq flattens any newlines *within* a single prompt to spaces,
+        # so jq's `-r` output is guaranteed to be exactly one line per prompt. Doing this
+        # with `tr` after the pipe would also flatten the line breaks *between* prompts
+        # and collapse the three into one.
+        prompts=("${(@f)$(jq -r '
+            select(.type=="user") | .message.content |
+            (if type=="string" then .
+             else (map(select(.type=="text") | .text // "") | join(" "))
+             end) | gsub("[\\n\\r\\t]+"; " ")
+            ' "$fpath_" 2>/dev/null \
             | grep -vE '^\s*(<command-|<local-command|Caveat:|<system-reminder|$)' \
-            | head -n3 | tr '\n\t' '  ')}")
+            | head -n3)}")
         if (( ${#prompts} == 0 )); then
             preview="(no user message)"
         else

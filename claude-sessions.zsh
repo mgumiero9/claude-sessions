@@ -10,10 +10,10 @@
 # jump straight back into any session without manually cd'ing first.
 #
 # Usage:
-#   claude-sessions               # 20 most recent sessions, sorted by mtime DESC
-#   claude-sessions 50            # 50 most recent sessions
-#   claude-sessions --by-size     # sort by file size DESC instead of mtime
-#   claude-sessions 50 -s         # 50 biggest sessions
+#   claude-sessions               # 60 biggest sessions (sorted by file size DESC)
+#   claude-sessions 100           # 100 biggest sessions
+#   claude-sessions --by-mtime    # sort by modification time DESC instead
+#   claude-sessions 20 -m         # 20 most recently modified sessions
 #   claude-resume <session-id>    # cd into the right project and resume
 #   claude-resume dc3fdfbd        # prefix match (first unique match wins)
 #
@@ -32,13 +32,15 @@
 
 claude-sessions() {
     emulate -L zsh
-    local limit=20
-    local by_size=0
+    local limit=60
+    local by_size=1
     while (( $# )); do
         case $1 in
-            --by-size|-s) by_size=1; shift ;;
+            --by-size|-s)  by_size=1; shift ;;
+            --by-mtime|-m) by_size=0; shift ;;
             --help|-h)
-                echo "Usage: claude-sessions [limit] [--by-size|-s]"
+                echo "Usage: claude-sessions [limit] [--by-size|-s | --by-mtime|-m]"
+                echo "Defaults: 60 sessions, sorted by file size DESC."
                 return 0 ;;
             -*) echo "Unknown flag: $1"; return 1 ;;
             *)

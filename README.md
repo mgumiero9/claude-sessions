@@ -10,10 +10,10 @@ Claude Code's built-in `/resume` only shows sessions for the project you launche
 
 ```text
 $ claude-sessions
-MODIFIED                 SIZE  SESSION                               PROJECT               BRANCH                      PREVIEW (first → last user prompt)
--------------------  --------  ------------------------------------  --------------------  --------------------------  ----------------------------------
-2026-05-13 10:31:25      1.4M  dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da  plantao-backend       P24H-16-sms-validation...   help me with this: SSH key            → ok let's push the branch
-2026-05-11 09:57:03    324.1K  c2ee22e2-4d8d-4c9d-bbe4-0155e2c8d55d  plantao-backend       main                        refactor auth middleware              → fix failing tests
+MODIFIED                 SIZE  SESSION                               PROJECT               BRANCH                      PREVIEW (first 3 user prompts)
+-------------------  --------  ------------------------------------  --------------------  --------------------------  ------------------------------
+2026-05-13 10:31:25      1.4M  dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da  plantao-backend       P24H-16-sms-validation...   help me with this: SSH key → can you check the migra → also run the tests
+2026-05-11 09:57:03    324.1K  c2ee22e2-4d8d-4c9d-bbe4-0155e2c8d55d  plantao-backend       main                        refactor auth middleware → tests are failing → fix the token refresh path
 2026-05-08 11:31:23    112.8K  2bfae921-5520-476f-8169-fa5f9820c332  demo1                 main                        what's in this project?
 ...
 
@@ -28,7 +28,7 @@ Columns at a glance:
 - **SESSION** — full UUID, ready to copy into `claude --resume` (or pass a prefix to `claude-resume`).
 - **PROJECT** — just the basename of the directory Claude Code ran in (e.g. `plantao-backend`). Pair it with BRANCH and SESSION to disambiguate when several sessions live in the same repo.
 - **BRANCH** — the last `gitBranch` recorded in the session (i.e. the branch you were on when you stopped).
-- **PREVIEW** — the **first user prompt** followed by `→` and the **last user prompt**, so you see both the topic and where you left off. If there's only one prompt, just that one is shown.
+- **PREVIEW** — up to the **first 3 real user prompts** joined by `→`, each truncated to ~25 chars. Slash-commands, hooks, caveat banners, and system-reminder blobs are filtered out. Gives a richer sense of how the conversation opened than a single first-prompt line.
 
 ## Requirements
 

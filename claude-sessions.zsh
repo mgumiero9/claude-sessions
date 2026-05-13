@@ -69,16 +69,16 @@ claude-sessions() {
     fi
 
     printf '%-19s  %8s  %-36s  %-20s  %-26s  %s\n' \
-        "MODIFIED" "SIZE" "SESSION" "PROJECT" "BRANCH" "PREVIEW (first → last user prompt)"
+        "MODIFIED" "SIZE" "SESSION" "PROJECT" "BRANCH" "PREVIEW (first 3 user prompts)"
     printf '%-19s  %8s  %-36s  %-20s  %-26s  %s\n' \
         "-------------------" "--------" \
         "------------------------------------" \
         "--------------------" \
-        "--------------------------" "----------------------------------"
+        "--------------------------" "------------------------------"
 
     local line mtime rest size fpath_ proj sess when human \
-          cwd branch short_proj short_branch \
-          first_p last_p first_t last_t preview
+          cwd branch short_proj short_branch preview p
+    local -a prompts parts
     while IFS= read -r line; do
         mtime=${line%% *}; rest=${line#* }
         size=${rest%% *}; fpath_=${rest#* }
@@ -110,28 +110,24 @@ claude-sessions() {
         short_branch=$branch
         (( ${#short_branch} > 26 )) && short_branch="${short_branch:0:23}..."
 
-        # First and last real user prompts. "Real" = skip slash-commands, hooks,
-        # caveat banners, and system-reminder blobs. Gives you topic + where-I-left-off.
-        first_p=$(jq -r 'select(.type=="user") | .message.content |
+        # First 3 real user prompts. "Real" = skip slash-commands, hooks,
+        # caveat banners, and system-reminder blobs. Joined by →, each capped at ~25 chars
+        # so the column stays around 80.
+        prompts=("${(@f)$(jq -r 'select(.type=="user") | .message.content |
             if type=="string" then .
             else (map(select(.type=="text") | .text // "") | join(" "))
             end' "$fpath_" 2>/dev/null \
             | grep -vE '^\s*(<command-|<local-command|Caveat:|<system-reminder|$)' \
-            | head -n1 | tr '\n\t' '  ')
-        last_p=$(jq -r 'select(.type=="user") | .message.content |
-            if type=="string" then .
-            else (map(select(.type=="text") | .text // "") | join(" "))
-            end' "$fpath_" 2>/dev/null \
-            | grep -vE '^\s*(<command-|<local-command|Caveat:|<system-reminder|$)' \
-            | tail -n1 | tr '\n\t' '  ')
-        if [[ -z $first_p ]]; then
+            | head -n3 | tr '\n\t' '  ')}")
+        if (( ${#prompts} == 0 )); then
             preview="(no user message)"
-        elif [[ $first_p == $last_p ]]; then
-            preview=$(printf '%s' "$first_p" | cut -c 1-80)
         else
-            first_t=$(printf '%s' "$first_p" | cut -c 1-37)
-            last_t=$(printf '%s' "$last_p" | cut -c 1-37)
-            preview="${first_t} → ${last_t}"
+            parts=()
+            for p in $prompts; do
+                [[ -z $p ]] && continue
+                parts+=( "$(printf '%s' "$p" | cut -c 1-25)" )
+            done
+            preview=${(j: → :)parts}
         fi
 
         printf '%-19s  %8s  %-36s  %-20s  %-26s  %s\n' \

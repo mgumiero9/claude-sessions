@@ -10,12 +10,16 @@ Claude Code's built-in `/resume` only shows sessions for the project you launche
 
 ```text
 $ claude-sessions
-MODIFIED                 SIZE  SESSION                               PROJECT                                 PREVIEW
--------------------  --------  ------------------------------------  --------------------------------------  -------
-2026-05-11 10:31:25    290.4K  dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da  /Users/me/Developer/foo/backend         help me with this: SSH key
-2026-05-11 09:57:03    324.1K  c2ee22e2-4d8d-4c9d-bbe4-0155e2c8d55d  /Users/me/Developer/foo/backend         por favor veja se faz sentido as respostas...
-2026-05-08 11:31:23    112.8K  2bfae921-5520-476f-8169-fa5f9820c332  /Users/me/Developer/bar/demo1           what's in this project?
+MODIFIED                 SIZE  SESSION                               PROJECT                           BRANCH                      PREVIEW
+-------------------  --------  ------------------------------------  --------------------------------  --------------------------  -------
+2026-05-11 10:31:25    290.4K  dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da  /Users/me/Developer/foo/backend   P24H-16-sms-validation...   help me with this: SSH key
+2026-05-11 09:57:03    324.1K  c2ee22e2-4d8d-4c9d-bbe4-0155e2c8d55d  /Users/me/Developer/foo/backend   main                        por favor veja se faz sentido...
+2026-05-08 11:31:23    112.8K  2bfae921-5520-476f-8169-fa5f9820c332  /Users/me/Developer/bar/demo1     main                        what's in this project?
 ...
+
+$ claude-resume dc3fdfbd
+→ cd /Users/me/Developer/foo/backend
+→ claude --resume dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da
 ```
 
 ## Requirements
@@ -43,15 +47,21 @@ Or just copy the contents of `claude-sessions.zsh` straight into your `~/.zshrc`
 ## Usage
 
 ```bash
-claude-sessions          # 20 most recent sessions
-claude-sessions 50       # 50 most recent sessions
+claude-sessions               # 20 most recent sessions
+claude-sessions 50            # 50 most recent sessions
+
+claude-resume <session-id>    # cd into the right project and resume
+claude-resume dc3fdfbd        # session-id prefix is fine (first 8 chars usually unique)
 ```
 
 ## Resuming a session
 
-`claude-sessions` only lists — it doesn't resume, because resume is project-scoped. Once you spot the session you want, `cd` into the matching project directory and run:
+Claude Code's `--resume` is project-scoped: it only knows about sessions stored under the encoded folder for your current working directory. `claude-resume` reads the original `cwd` recorded in the session's JSONL, `cd`s there for you, and runs `claude --resume <full-id>`.
+
+If you'd rather do it by hand:
 
 ```bash
+cd /path/to/the/project
 claude --resume <session-id>
 ```
 

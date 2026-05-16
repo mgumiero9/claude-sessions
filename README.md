@@ -1,41 +1,70 @@
 # claude-sessions
 
-A tiny zsh function that lists every [Claude Code](https://claude.com/claude-code) session across all projects on your machine, sorted by most recent, with a preview of each session's first user prompt.
+A cross-project index of every [Claude Code](https://claude.com/claude-code)
+session on your machine — with an **LLM-written summary of what each session is
+about** in the PREVIEW column, not raw prompt fragments.
+
+It ships as a Claude Code **slash command** (`/sessions`) plus a small shell
+helper (`claude-resume`) for jumping back into a session from your terminal.
 
 ## Why?
 
-Claude Code's built-in `/resume` only shows sessions for the project you launched it from. If you switch between repos a lot, you lose visibility into in-progress sessions in other projects. `claude-sessions` gives you a single global view.
+Claude Code's built-in `/resume` only shows sessions for the project you
+launched it from. Switch repos a lot and you lose track of in-progress work
+elsewhere. The earlier version of this tool listed sessions with the first few
+user prompts truncated to ~25 chars each — but real first prompts are mostly
+noise (pasted terminal output, `[Image: source: …]`, "ok", "sim pf"), so you
+still couldn't tell what a session was *about*.
+
+`/sessions` fixes that: a script does the cheap extraction, then Claude itself
+writes a one-line summary per session. Summaries are **cached per session**
+(keyed by file mtime), so only sessions that actually changed get
+re-summarized — the second run is effectively instant.
 
 ## Demo
 
+Inside any Claude Code session:
+
 ```text
-$ claude-sessions
-MODIFIED                 SIZE  SESSION                               PROJECT               BRANCH                      PREVIEW (first 3 user prompts)
--------------------  --------  ------------------------------------  --------------------  --------------------------  ------------------------------
-2026-05-13 10:31:25      1.4M  dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da  plantao-backend       P24H-16-sms-validation...   help me with this: SSH key → can you check the migra → also run the tests
-2026-05-11 09:57:03    324.1K  c2ee22e2-4d8d-4c9d-bbe4-0155e2c8d55d  plantao-backend       main                        refactor auth middleware → tests are failing → fix the token refresh path
-2026-05-08 11:31:23    112.8K  2bfae921-5520-476f-8169-fa5f9820c332  demo1                 main                        what's in this project?
+> /sessions 20
+
+MODIFIED          SIZE   SESSION                               PROJECT          BRANCH                PREVIEW
+----------------  -----  ------------------------------------  ---------------  --------------------  --------------------------------------------
+2026-05-13 17:06  6.4M   6501bbeb-1444-4a40-95b8-3479697b83b7  plantao-app      main                  Fix iOS/Flutter build; ended on Apple ID signing
+2026-05-13 17:08  2.8M   09c7d703-ccd7-45c9-b607-decc1643754e  plantao-backend  bugfix/P24H-17-ci-…   Stabilize CI: brakeman/rubocop on PR #13
+2026-05-13 16:10  2.8M   8e157abf-c082-47d1-865c-01466ebf0742  plantao-app      main                  Onboard new dev: SMS verification walkthrough
 ...
 
-$ claude-resume dc3fdfbd
-→ cd /Users/me/Developer/plantao24h/repos/plantao-backend
-→ claude --resume dc3fdfbd-e5b1-4dd6-af66-b00ef76ae6da
+Resume any session from a terminal with:  claude-resume <session-id-prefix>
 ```
 
-Columns at a glance:
+Then, from your shell:
+
+```text
+$ claude-resume 09c7d703
+→ cd /Users/me/Developer/plantao24h/repos/plantao-backend
+→ claude --resume 09c7d703-ccd7-45c9-b607-decc1643754e
+```
+
+### Columns
 
 - **MODIFIED / SIZE** — when and how big the transcript is on disk.
-- **SESSION** — full UUID, ready to copy into `claude --resume` (or pass a prefix to `claude-resume`).
-- **PROJECT** — just the basename of the directory Claude Code ran in (e.g. `plantao-backend`). Pair it with BRANCH and SESSION to disambiguate when several sessions live in the same repo.
-- **BRANCH** — the last `gitBranch` recorded in the session (i.e. the branch you were on when you stopped).
-- **PREVIEW** — up to the **first 3 real user prompts** joined by `→`, each truncated to ~25 chars. Slash-commands, hooks, caveat banners, and system-reminder blobs are filtered out. Gives a richer sense of how the conversation opened than a single first-prompt line.
+- **SESSION** — full UUID, ready for `claude-resume` (a prefix works too).
+- **PROJECT** — basename of the directory Claude Code ran in. Pair it with
+  BRANCH + SESSION to disambiguate sessions in the same repo.
+- **BRANCH** — the last `gitBranch` recorded (the branch you stopped on).
+- **PREVIEW** — an LLM summary of what the session is about, written from the
+  first 5 + last 3 *real* user prompts (slash-commands, hooks, pasted terminal
+  output, bare image tags and pure acknowledgements are filtered out before the
+  model ever sees them). Cached per session.
 
 ## Requirements
 
 - **zsh** (default shell on macOS since Catalina)
-- **[jq](https://jqlang.github.io/jq/)** — `brew install jq` on macOS, `apt install jq` on Debian/Ubuntu
+- **[jq](https://jqlang.github.io/jq/)** — `brew install jq` / `apt install jq`
+- **Claude Code** (the `/sessions` command runs inside it)
 
-Standard utilities used: `find`, `stat`, `date`, `grep`, `head`, `tr`, `cut`. Works on macOS and Linux.
+Standard utilities used: `find`, `stat`, `date`, `head`, `tail`. macOS + Linux.
 
 ## Install
 
@@ -43,35 +72,42 @@ Standard utilities used: `find`, `stat`, `date`, `grep`, `head`, `tr`, `cut`. Wo
 # Clone somewhere stable
 git clone https://github.com/mgumiero9/claude-sessions.git ~/.local/share/claude-sessions
 
-# Source it from your ~/.zshrc
-echo 'source ~/.local/share/claude-sessions/claude-sessions.zsh' >> ~/.zshrc
+# 1. The extractor script — used by the /sessions slash command
+mkdir -p ~/.claude/scripts ~/.claude/commands
+cp ~/.local/share/claude-sessions/claude-sessions-extract.zsh ~/.claude/scripts/
+cp ~/.local/share/claude-sessions/commands/sessions.md         ~/.claude/commands/
 
-# Reload
+# 2. The shell helper (claude-resume) — source from ~/.zshrc
+echo 'source ~/.local/share/claude-sessions/claude-sessions.zsh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-Or just copy the contents of `claude-sessions.zsh` straight into your `~/.zshrc`.
+`/sessions` then works from any Claude Code session on the machine.
 
 ## Usage
 
-```bash
-claude-sessions               # 60 biggest sessions (sorted by file size DESC)
-claude-sessions 100           # 100 biggest sessions
-
-claude-sessions --by-mtime    # sort by modification time DESC instead
-claude-sessions 20 -m         # 20 most recently modified sessions
-
-claude-resume <session-id>    # cd into the right project and resume
-claude-resume dc3fdfbd        # session-id prefix is fine (first 8 chars usually unique)
+```text
+/sessions                     # 60 biggest sessions, summarized (cached)
+/sessions 100                 # 100 biggest
+/sessions --by-mtime          # sort by most-recently-modified instead
+/sessions 20 -m               # 20 most recently modified
 ```
 
-The default sort is by transcript file size (largest first) with a default limit of 60 — it surfaces your longest-running / most substantial sessions, which are usually the ones worth resuming or pruning. Pass `--by-mtime` (alias `-m`) to switch to "what was I working on most recently?" instead.
+```bash
+claude-resume <session-id>    # cd into the right project and resume
+claude-resume 09c7d703        # id prefix is fine (first 8 chars usually unique)
+```
+
+Default sort is transcript file size (largest first, limit 60) — it surfaces
+your longest / most substantial sessions, usually the ones worth resuming or
+pruning. `--by-mtime` (`-m`) switches to "what did I touch most recently?".
 
 ## Resuming a session
 
-Claude Code's `--resume` is project-scoped: it only knows about sessions stored under the encoded folder for your current working directory. `claude-resume` reads the original `cwd` recorded in the session's JSONL, `cd`s there for you, and runs `claude --resume <full-id>`.
-
-If you'd rather do it by hand:
+Claude Code's `--resume` is project-scoped: it only knows sessions under the
+encoded folder for your current directory. `claude-resume` reads the original
+`cwd` from the session's JSONL, `cd`s there, and runs `claude --resume
+<full-id>`. By hand:
 
 ```bash
 cd /path/to/the/project
@@ -80,30 +116,36 @@ claude --resume <session-id>
 
 ## How it works
 
-Claude Code stores session transcripts at:
+Claude Code stores transcripts at
+`~/.claude/projects/<encoded-project-path>/<session-uuid>.jsonl` (the absolute
+project path with `/` → `-`).
 
-```
-~/.claude/projects/<encoded-project-path>/<session-uuid>.jsonl
-```
-
-where `<encoded-project-path>` is the absolute project path with `/` replaced by `-`.
-
-The function:
-
-1. Walks `~/.claude/projects/*/` and finds every `.jsonl` file.
-2. Sorts by mtime (newest first).
-3. Uses `jq` to pull out the first real user prompt from each transcript (skipping slash-command messages, hooks, and system reminders).
-4. Prints a compact table.
+1. **`/sessions`** runs `claude-sessions-extract.zsh` with `zsh -f` (skips your
+   zshenv, which can inject a stdout logger).
+2. The script walks every `.jsonl`, sorts by size (or mtime), and for each
+   session extracts the first 5 + last 3 real user prompts, dropping the noise.
+3. It consults `~/.claude/.sessions-summary-cache.json`: sessions whose mtime
+   matches the cache are emitted with their stored summary; the rest are
+   emitted with their prompts for the model to summarize.
+4. Claude writes summaries for the cache misses, merges them back into the
+   cache, and prints the table.
 
 ## Notes
 
-### zsh footgun
+### zsh footguns (both of these bit us)
 
-In zsh, `$path` (lowercase) is a special array tied to `$PATH`, and `$fpath` mirrors the function search path. Assigning to either inside a function silently breaks command lookup. If you fork this, **don't rename the `fpath_` variable back to `path`** — that's why it has the trailing underscore.
+- `$path` / `$fpath` are special zsh arrays tied to `$PATH` / the function
+  search path. The file-path variable is named `fpath_` on purpose — don't
+  rename it back.
+- `local` at **script top level** (outside any function) *prints*
+  `name=value` for an already-set variable. That's why all of
+  `claude-sessions-extract.zsh` lives inside a function — running it as a plain
+  script otherwise pollutes the NDJSON on stdout.
 
 ### Bash support
 
-The function uses a few zsh-specific features (`${var:h:t}` path modifiers, native arrays). Bash users can install zsh just to run it, or port it — PRs welcome.
+Uses zsh-specific features (`${var:h:t}`, native arrays, glob qualifiers).
+Bash users can install zsh just to run it, or port it — PRs welcome.
 
 ## License
 

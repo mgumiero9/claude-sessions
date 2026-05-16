@@ -49,12 +49,18 @@ For the inline (Z ≤ 8) path, use the **Write** tool to create
 zsh -f ~/.claude/scripts/claude-sessions-cache.zsh merge /tmp/.cs-sum*.json
 ```
 
-## Step 4 — render (deterministic, this is the deliverable)
+## Step 4 — render, then surface it
 
 ```
 zsh -f ~/.claude/scripts/claude-sessions-cache.zsh render
 ```
 
-That command prints the final table and the resume hint. Its output is shown
-to the user as-is — do **not** reprint, reformat, or summarize it. Reply with
-at most one short sentence (e.g. the `[X/Y cached…]` figure), or nothing.
+The Claude Code UI collapses long Bash output, so the table would be hidden.
+Therefore your final message must be **exactly** the `render` stdout, copied
+**verbatim** inside a single ``` fenced code block — every row, character for
+character, in the same order. Do not reconstruct rows from earlier data, do
+not edit, realign, truncate, translate, or add/remove columns; this is a
+literal copy of a table that is already correct, not a regeneration.
+
+After the code block, add at most one short line with the `[X/Y cached, Z
+summarized]` figure. Nothing else.

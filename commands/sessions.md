@@ -1,79 +1,85 @@
 ---
-description: List Claude Code sessions across all projects with an LLM-written summary of what each one is about (cached).
+description: List Claude Code sessions across all projects with an LLM-written summary of what each one is about (cached, parallelized).
 argument-hint: "[limit] [--by-size|-s | --by-mtime|-m]"
-allowed-tools: Bash, Read, Write
+allowed-tools: Bash, Read, Write, Agent
 ---
 
 You are generating a cross-project session index. The PREVIEW column must be a
-human-readable summary of *what each session is about* — not raw prompt
-fragments. Do the cheap extraction with the script, summarize only what isn't
-cached, then print one clean table.
+human-readable summary of *what each session is about*. Do the cheap
+extraction with the script, summarize only the cache misses (in parallel),
+then print one clean table.
 
-## Step 1 — extract (deterministic, cheap)
+Speed matters: the only slow part is generating summaries, so minimize and
+parallelize that work. Do NOT think out loud between steps — just execute.
 
-Run, passing the user's arguments through verbatim (default limit is 60):
+## Step 1 — extract (cheap, deterministic)
+
+Run, passing the user's args through verbatim (default limit 60):
 
 ```
 zsh -f ~/.claude/scripts/claude-sessions-extract.zsh $ARGUMENTS
 ```
 
-`zsh -f` is required (skips the user's zshenv, which can inject a stdout
-logger). The script prints one JSON object per line:
-
+`zsh -f` is required. Each line is one JSON object:
 `{id, mtime, size_h, when, project, branch, cached, summary, prompts}`
 
-- `cached: true`  → `summary` is already filled (reuse it verbatim, do NOT re-summarize).
-- `cached: false` → `summary` is null; `prompts` holds 5 first + 3 last real user prompts.
+- `cached: true`  → `summary` is filled (sessions seen before, or ones with no
+  readable prompts). Reuse `summary` verbatim. **Never re-summarize these.**
+- `cached: false` → needs a summary; `prompts` has 5 first + 3 last real prompts.
 
-If the output is a single `{"error": ...}` object, show that message and stop.
+If the only output is `{"error": ...}`, show it and stop. Keep the full NDJSON
+(you need every row, in order, for the table).
 
-## Step 2 — summarize the cache misses
+## Step 2 — summarize the cache misses (parallel)
 
-For every record with `cached: false`, write a `summary`:
+Collect the `cached: false` records. Let N be how many there are.
 
-- 4–9 words, no trailing period, Title-style but plain.
-- Say what the work was *about*; if the last prompts make the outcome clear,
-  append it after a semicolon (e.g. `Fix iOS build; ended on Apple ID signing`).
-- Match the dominant language of that session's prompts (Portuguese → write in
-  Portuguese, English → English).
-- Ignore leftover noise (image tags, pasted output). If prompts are
-  `["(no user message)"]`, use the summary `(no readable prompts)`.
+- **N == 0** → skip to Step 4.
+- **N ≤ 12** → summarize them yourself, inline, now.
+- **N > 12** → split them into 4 contiguous groups of roughly equal size and
+  dispatch 4 `Agent` calls **in a single message** (so they run concurrently),
+  `subagent_type: "general-purpose"`, `model: "haiku"`. Give each agent only
+  its group's `{id, mtime, project, prompts}` records and this instruction:
 
-Do this from the data already in front of you — do not re-read the JSONL files.
+  > For each record, write a `summary`: 4–9 words, no trailing period, plain
+  > Title-style, saying what the work was about; if the last prompts make the
+  > outcome clear, append it after a semicolon. Match the dominant language of
+  > that session's prompts (Portuguese prompts → Portuguese summary). Ignore
+  > leftover noise (image tags, pasted output). Reply with ONLY a compact JSON
+  > object `{"<id>": {"mtime": <mtime>, "summary": "<text>"}, ...}` — no prose,
+  > no code fence.
 
-## Step 3 — persist the cache (so next run is instant)
+  Merge the JSON objects the agents return.
 
-Build a JSON object of ONLY the sessions you just summarized in this form:
+Apply the same summary style for the inline (N ≤ 12) path.
 
-`{ "<id>": { "mtime": <mtime>, "summary": "<your summary>" }, ... }`
+## Step 3 — persist the cache (next run is instant)
 
-Write it to `/tmp/.cs-new-summaries.json` (use the Write tool), then merge it
-into the cache, newest winning:
+Only for sessions summarized in Step 2 (skip if none). Write the merged
+`{ "<id>": { "mtime": <mtime>, "summary": "<text>" }, ... }` object to
+`/tmp/.cs-new-summaries.json` with the Write tool, then:
 
 ```
 jq -s '.[0] * .[1]' ~/.claude/.sessions-summary-cache.json /tmp/.cs-new-summaries.json \
   > /tmp/.cs-cache-merged.json && mv /tmp/.cs-cache-merged.json ~/.claude/.sessions-summary-cache.json
 ```
 
-Skip Step 3 entirely if every record was already `cached: true`.
-
 ## Step 4 — print the table
 
-Output as a plain monospace code block (no markdown table), columns in this
-order and these widths, rows in the same order the script emitted them:
+Plain monospace code block (no markdown table), rows in the script's original
+order, columns and widths:
 
 ```
 MODIFIED          SIZE   SESSION                               PROJECT             BRANCH                PREVIEW
 ----------------  -----  ------------------------------------  ------------------  --------------------  --------------------------------------------
-<when>            <size> <id>                                  <project>           <branch>              <summary>
+<when>            <size> <full id>                             <project>           <branch>              <summary>
 ```
 
-- `MODIFIED` = `when`, `SIZE` = `size_h`, `SESSION` = full `id` (needed to resume),
-  `PROJECT`/`BRANCH` truncated to their column width with `…` if longer,
-  `PREVIEW` = the summary (cached or freshly written).
+`PROJECT`/`BRANCH` truncated to column width with `…` if longer; `SESSION` is
+the full id (needed to resume); `PREVIEW` is the summary (cached or fresh).
 
-After the table, print one line:
+After the table, exactly one line:
 
 `Resume any session from a terminal with:  claude-resume <session-id-prefix>`
 
-Be concise in prose around the table — the table is the deliverable.
+Keep prose around the table to a minimum — the table is the deliverable.

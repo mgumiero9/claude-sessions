@@ -154,9 +154,11 @@ _cse_main() {
         done
 
         if (( ${#final_prompts} == 0 )); then
+            # No readable prompts → the summary is deterministic. Emit it as
+            # already-resolved (cached:true) so the LLM side skips it entirely.
             jq -cn --arg id "$sess" --argjson mt "$mtime" --arg sh "$human" \
                    --arg w "$when" --arg pj "$short_proj" --arg br "$branch" \
-                '{id:$id,mtime:$mt,size_h:$sh,when:$w,project:$pj,branch:$br,cached:false,summary:null,prompts:["(no user message)"]}'
+                '{id:$id,mtime:$mt,size_h:$sh,when:$w,project:$pj,branch:$br,cached:true,summary:"(no readable prompts)",prompts:[]}'
         else
             jarr=$(printf '%s\n' "${final_prompts[@]}" | jq -R . | jq -cs .)
             jq -cn --arg id "$sess" --argjson mt "$mtime" --arg sh "$human" \

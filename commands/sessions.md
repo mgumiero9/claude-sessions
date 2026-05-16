@@ -1,85 +1,60 @@
 ---
-description: List Claude Code sessions across all projects with an LLM-written summary of what each one is about (cached, parallelized).
+description: Cross-project Claude Code session index with cached LLM summaries. Deterministic table + cache; the model only summarizes what changed.
 argument-hint: "[limit] [--by-size|-s | --by-mtime|-m]"
-allowed-tools: Bash, Read, Write, Agent
+allowed-tools: Bash, Write, Agent
 ---
 
-You are generating a cross-project session index. The PREVIEW column must be a
-human-readable summary of *what each session is about*. Do the cheap
-extraction with the script, summarize only the cache misses (in parallel),
-then print one clean table.
+Your ONLY job is to write summaries for sessions whose transcript changed
+since last time. Extraction, the cache, and the table are deterministic
+scripts — never hand-render the table or hand-write the cache JSON (it is slow
+and corrupts data). Do not narrate; just run the steps.
 
-Speed matters: the only slow part is generating summaries, so minimize and
-parallelize that work. Do NOT think out loud between steps — just execute.
-
-## Step 1 — extract (cheap, deterministic)
-
-Run, passing the user's args through verbatim (default limit 60):
+## Step 1 — what changed
 
 ```
-zsh -f ~/.claude/scripts/claude-sessions-extract.zsh $ARGUMENTS
+zsh -f ~/.claude/scripts/claude-sessions-cache.zsh misses $ARGUMENTS
 ```
 
-`zsh -f` is required. Each line is one JSON object:
-`{id, mtime, size_h, when, project, branch, cached, summary, prompts}`
+stderr prints `[X/Y cached, Z to summarize]`. stdout is one JSON object per
+session that still needs a summary: `{id, mtime, project, prompts}`.
 
-- `cached: true`  → `summary` is filled (sessions seen before, or ones with no
-  readable prompts). Reuse `summary` verbatim. **Never re-summarize these.**
-- `cached: false` → needs a summary; `prompts` has 5 first + 3 last real prompts.
+- **stdout empty** → nothing changed. Go straight to Step 4.
+- otherwise → Step 2.
 
-If the only output is `{"error": ...}`, show it and stop. Keep the full NDJSON
-(you need every row, in order, for the table).
+## Step 2 — summarize the misses
 
-## Step 2 — summarize the cache misses (parallel)
+Style for every summary: 4–9 words, no trailing period, plain Title-style,
+saying what the work was about; if the last prompts make the outcome clear,
+add it after a semicolon. Match the prompts' dominant language (Portuguese
+prompts → Portuguese summary). Ignore leftover noise (image tags, pasted
+output).
 
-Collect the `cached: false` records. Let N be how many there are.
+Let Z = number of miss records.
 
-- **N == 0** → skip to Step 4.
-- **N ≤ 12** → summarize them yourself, inline, now.
-- **N > 12** → split them into 4 contiguous groups of roughly equal size and
-  dispatch 4 `Agent` calls **in a single message** (so they run concurrently),
-  `subagent_type: "general-purpose"`, `model: "haiku"`. Give each agent only
-  its group's `{id, mtime, project, prompts}` records and this instruction:
+- **Z ≤ 8** → write them yourself now.
+- **Z > 8** → split the miss records into 4 contiguous groups and dispatch 4
+  `Agent` calls **in one message** (concurrent), `subagent_type:
+  "general-purpose"`, `model: "haiku"`. Give each agent only its group's
+  records and the style above, and tell it: *Reply by writing the file
+  `/tmp/.cs-sumN.json` (N = your group number) containing exactly
+  `{"<id>":{"mtime":<mtime>,"summary":"<text>"}, ...}` — nothing else.* Assign
+  each agent a distinct N (1..4).
 
-  > For each record, write a `summary`: 4–9 words, no trailing period, plain
-  > Title-style, saying what the work was about; if the last prompts make the
-  > outcome clear, append it after a semicolon. Match the dominant language of
-  > that session's prompts (Portuguese prompts → Portuguese summary). Ignore
-  > leftover noise (image tags, pasted output). Reply with ONLY a compact JSON
-  > object `{"<id>": {"mtime": <mtime>, "summary": "<text>"}, ...}` — no prose,
-  > no code fence.
+For the inline (Z ≤ 8) path, use the **Write** tool to create
+`/tmp/.cs-sum1.json` with the same `{"<id>":{"mtime":..,"summary":..}}` shape.
 
-  Merge the JSON objects the agents return.
-
-Apply the same summary style for the inline (N ≤ 12) path.
-
-## Step 3 — persist the cache (next run is instant)
-
-Only for sessions summarized in Step 2 (skip if none). Write the merged
-`{ "<id>": { "mtime": <mtime>, "summary": "<text>" }, ... }` object to
-`/tmp/.cs-new-summaries.json` with the Write tool, then:
+## Step 3 — fold summaries into the cache
 
 ```
-jq -s '.[0] * .[1]' ~/.claude/.sessions-summary-cache.json /tmp/.cs-new-summaries.json \
-  > /tmp/.cs-cache-merged.json && mv /tmp/.cs-cache-merged.json ~/.claude/.sessions-summary-cache.json
+zsh -f ~/.claude/scripts/claude-sessions-cache.zsh merge /tmp/.cs-sum*.json
 ```
 
-## Step 4 — print the table
-
-Plain monospace code block (no markdown table), rows in the script's original
-order, columns and widths:
+## Step 4 — render (deterministic, this is the deliverable)
 
 ```
-MODIFIED          SIZE   SESSION                               PROJECT             BRANCH                PREVIEW
-----------------  -----  ------------------------------------  ------------------  --------------------  --------------------------------------------
-<when>            <size> <full id>                             <project>           <branch>              <summary>
+zsh -f ~/.claude/scripts/claude-sessions-cache.zsh render
 ```
 
-`PROJECT`/`BRANCH` truncated to column width with `…` if longer; `SESSION` is
-the full id (needed to resume); `PREVIEW` is the summary (cached or fresh).
-
-After the table, exactly one line:
-
-`Resume any session from a terminal with:  claude-resume <session-id-prefix>`
-
-Keep prose around the table to a minimum — the table is the deliverable.
+That command prints the final table and the resume hint. Its output is shown
+to the user as-is — do **not** reprint, reformat, or summarize it. Reply with
+at most one short sentence (e.g. the `[X/Y cached…]` figure), or nothing.

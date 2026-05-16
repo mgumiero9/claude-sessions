@@ -72,9 +72,10 @@ Standard utilities used: `find`, `stat`, `date`, `head`, `tail`. macOS + Linux.
 # Clone somewhere stable
 git clone https://github.com/mgumiero9/claude-sessions.git ~/.local/share/claude-sessions
 
-# 1. The extractor script — used by the /sessions slash command
+# 1. The helper scripts — used by the /sessions slash command
 mkdir -p ~/.claude/scripts ~/.claude/commands
 cp ~/.local/share/claude-sessions/claude-sessions-extract.zsh ~/.claude/scripts/
+cp ~/.local/share/claude-sessions/claude-sessions-cache.zsh   ~/.claude/scripts/
 cp ~/.local/share/claude-sessions/commands/sessions.md         ~/.claude/commands/
 
 # 2. The shell helper (claude-resume) — source from ~/.zshrc
@@ -120,15 +121,29 @@ Claude Code stores transcripts at
 `~/.claude/projects/<encoded-project-path>/<session-uuid>.jsonl` (the absolute
 project path with `/` → `-`).
 
-1. **`/sessions`** runs `claude-sessions-extract.zsh` with `zsh -f` (skips your
-   zshenv, which can inject a stdout logger).
-2. The script walks every `.jsonl`, sorts by size (or mtime), and for each
-   session extracts the first 5 + last 3 real user prompts, dropping the noise.
-3. It consults `~/.claude/.sessions-summary-cache.json`: sessions whose mtime
-   matches the cache are emitted with their stored summary; the rest are
-   emitted with their prompts for the model to summarize.
-4. Claude writes summaries for the cache misses, merges them back into the
-   cache, and prints the table.
+The model only ever writes summaries for sessions that changed. Everything
+else — extraction, caching, and **rendering the table** — is deterministic
+shell, because an LLM hand-rendering a 50-row table is slow and corrupts
+ids/summaries.
+
+1. `claude-sessions-extract.zsh` walks every `.jsonl`, sorts by size (or
+   mtime), and per session extracts the first 5 + last 3 real user prompts,
+   dropping the noise. Sessions with no readable prompts get a deterministic
+   summary on the spot.
+2. `claude-sessions-cache.zsh misses` runs the extractor (with `zsh -f`, since
+   a user's zshenv can inject a stdout logger), stashes the full NDJSON, and
+   prints **only** the sessions whose mtime no longer matches
+   `~/.claude/.sessions-summary-cache.json`. It also prints
+   `[X/Y cached, Z to summarize]` so you can see the cache working.
+3. `/sessions` summarizes just those Z misses — inline if few, or fanned out
+   across 4 parallel Haiku subagents if many — each writing a small JSON chunk.
+4. `claude-sessions-cache.zsh merge` folds the chunks into the cache.
+5. `claude-sessions-cache.zsh render` prints the final aligned table straight
+   from the stash + cache. No model involvement; that stdout is the output you
+   see.
+
+A warm run (nothing changed) skips steps 3–4 entirely: two quick shell calls,
+no model generation, effectively instant.
 
 ## Notes
 

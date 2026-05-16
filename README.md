@@ -31,9 +31,9 @@ Inside any Claude Code session:
 
 MODIFIED          SIZE     SESSION                               PROJECT           BRANCH                            PREVIEW
 ----------------  -------  ------------------------------------  ----------------  --------------------------------  --------------------------------------------
-2026-05-13 17:06  6.4M     6501bbeb-1444-4a40-95b8-3479697b83b7  plantao-app       main                              Apple ID setup for Flutter build; Ruby version compatibility
-2026-05-13 17:08  2.8M     09c7d703-ccd7-45c9-b607-decc1643754e  plantao-backend   bugfix/P24H-17-ci-tests-linters…  Fix CI pipeline linting errors; secrets and linter warnings
-2026-05-13 16:10  2.8M     8e157abf-c082-47d1-865c-01466ebf0742  plantao-app       main                              SMS verification as secondary auth option
+2026-05-13 17:06  6.4M     6501bbeb-1444-4a40-95b8-3479697b83b7  mobile-app        main                              Apple ID setup for Flutter build; Ruby version compatibility
+2026-05-13 17:08  2.8M     09c7d703-ccd7-45c9-b607-decc1643754e  api-backend       bugfix/CI-17-ci-tests-linters…    Fix CI pipeline linting errors; secrets and linter warnings
+2026-05-13 16:10  2.8M     8e157abf-c082-47d1-865c-01466ebf0742  mobile-app        main                              SMS verification as secondary auth option
 ...
 
 Resume any session from a terminal with:  claude-resume <session-id-prefix>
@@ -45,7 +45,7 @@ Then, from your shell:
 
 ```text
 $ claude-resume 09c7d703
-→ cd /Users/me/Developer/plantao24h/repos/plantao-backend
+→ cd /Users/me/Developer/acme/repos/api-backend
 → claude --resume 09c7d703-ccd7-45c9-b607-decc1643754e
 ```
 
